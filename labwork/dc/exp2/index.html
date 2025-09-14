@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>RMI/RPC/WebSocket Chat</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; }
+    #log { border: 1px solid #ccc; height: 360px; overflow: auto; padding: .5rem; }
+    .sys { color: #555; }
+    .me { color: #0a0; }
+    .other { color: #06c; }
+  </style>
+</head>
+<body>
+  <h2>Chat (RMI auth, RPC admin, WebSocket messages)</h2>
+  <div>
+    <input id="u" placeholder="username" />
+    <input id="p" placeholder="password" type="password"/>
+    <button id="login">Login</button>
+  </div>
+  <pre id="log"></pre>
+  <div>
+    <input id="msg" placeholder="type a message and press Enter" style="width:100%"/>
+  </div>
+
+<script>
+let ws, username;
+const log = (txt, cls="") => {
+  const el = document.getElementById('log');
+  el.innerHTML += `<div class="${cls}">${txt}</div>`;
+  el.scrollTop = el.scrollHeight;
+};
+
+document.getElementById('login').onclick = () => {
+  username = document.getElementById('u').value.trim();
+  const password = document.getElementById('p').value;
+  ws = new WebSocket("ws://localhost:8765/");
+  ws.onopen = () => {
+    ws.send(JSON.stringify({type:"login", username, password}));
+  };
+  ws.onmessage = (ev) => {
+    const data = JSON.parse(ev.data);
+    if (data.type === "login" && data.status === "ok") {
+      log("✔ logged in via RMI (token: " + data.token + ")", "sys");
+    } else if (data.type === "login") {
+      log("❌ login failed: " + (data.reason || "unknown"), "sys");
+    } else if (data.type === "system") {
+      log(data.message, "sys");
+    } else if (data.type === "chat") {
+      const who = data.from === username ? "me" : "other";
+      log(`${data.from}: ${data.message}`, who);
+    } else if (data.type === "pm") {
+      log(`[PM from ${data.from}] ${data.message}`, "other");
+    } else if (data.type === "error") {
+      log("ERROR: " + data.error, "sys");
+    }
+  };
+  ws.onclose = (e) => log(`connection closed (${e.code} ${e.reason||""})`, "sys");
+};
+
+document.getElementById('msg').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && ws && ws.readyState === 1) {
+    const text = e.target.value;
+    if (text.startsWith("/pm ")) {
+      const [_, to, ...rest] = text.split(" ");
+      ws.send(JSON.stringify({type:"pm", to, message: rest.join(" ")}));
+    } else {
+      ws.send(JSON.stringify({type:"chat", message: text}));
+    }
+    e.target.value = "";
+  }
+});
+</script>
+</body>
+</html>

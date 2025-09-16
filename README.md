@@ -90,17 +90,26 @@ Docker Compose is used to define, build, and run this multi-container applicatio
 4.  **Apply Django Migrations:**
     Once the containers are running, you need to apply the database migrations to set up the database schema. You can do this by executing the `migrate` command inside one of the backend containers.
     ```bash
-    docker compose exec backend-1 python manage.py migrate
+    docker compose exec backend python manage.py migrate
     ```
-    (If you scaled the backend, you can pick any instance, e.g., `backend-1`).
+    (If you scaled the backend, you can pick any instance, e.g., `backend`).
 
 5.  **Create a Django Superuser (Optional but Recommended):**
     To access the Django admin panel, you can create a superuser:
     ```bash
-    docker compose exec backend-1 python manage.py createsuperuser
+    docker compose exec backend python manage.py createsuperuser
     ```
     Follow the prompts to create a username, email, and password.
+6. Start Frontend Docker containers
+    ```bash
+    cd ChatFrontend
+    docker compose up -d
+    ```
 
+7. Run the development server < Congrats for to the end ;) >
+    ```bash
+    npm run dev
+    ```
 ## How to Use
 
 1.  **Access the Application:**
@@ -140,4 +149,3 @@ This chosen architecture provides several significant advantages for building a 
 * **Clear Separation of Concerns:** Breaking the application into distinct services with well-defined roles makes the codebase more modular, easier to understand, maintain, and allows teams to work on different parts of the system independently.
 
 This architecture provides a robust, scalable, and maintainable foundation for a real-time application, demonstrating best practices in modern distributed system design.
-

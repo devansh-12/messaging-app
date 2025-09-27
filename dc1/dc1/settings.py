@@ -18,7 +18,10 @@ from urllib.parse import urlparse
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LOGS_DIR = os.path.join(BASE_DIR, 'logs')  # instead of /app/logs
+os.makedirs(LOGS_DIR, exist_ok=True)
+
 
 load_dotenv()
 # Quick-start development settings - unsuitable for production
@@ -117,9 +120,13 @@ WSGI_APPLICATION = "dc1.wsgi.application"
 #     }
 # }
 
-# Docker Compose Database
+# Dual Database Setup - MySQL Primary, Neon PostgreSQL Secondary
+
+# Parse Neon PostgreSQL URL
+tmpPostgres = urlparse(os.getenv("DATABASE_URL", ""))
 
 DATABASES = {
+    # Primary Database - MySQL (for reads and writes)
     "default": {
         "ENGINE": "django.db.backends.mysql",
         "NAME": os.getenv("MYSQL_DATABASE", "chatdb"),
@@ -127,6 +134,22 @@ DATABASES = {
         "PASSWORD": os.getenv("MYSQL_PASSWORD", "chatpass"),
         "HOST": os.getenv("MYSQL_HOST", "db"),  # Matches MySQL container name in `docker-compose.yml`
         "PORT": os.getenv("MYSQL_PORT", "3306"),
+        "OPTIONS": {
+            'charset': 'utf8mb4',
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        }
+    },
+    # Secondary Database - Neon PostgreSQL (for backup reads and dual writes)
+    "neon": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": tmpPostgres.path.replace('/', '') if tmpPostgres.path else "chatdb_neon",
+        "USER": tmpPostgres.username if tmpPostgres.username else os.getenv("NEON_USER", "chatuser"),
+        "PASSWORD": tmpPostgres.password if tmpPostgres.password else os.getenv("NEON_PASSWORD", "chatpass"),
+        "HOST": tmpPostgres.hostname if tmpPostgres.hostname else os.getenv("NEON_HOST", "localhost"),
+        "PORT": tmpPostgres.port if tmpPostgres.port else os.getenv("NEON_PORT", "5432"),
+        "OPTIONS": {
+            'sslmode': 'require' if tmpPostgres.hostname else 'prefer',
+        }
     }
 }
 
@@ -193,6 +216,9 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")  # Media uploads
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Database Router Configuration
+DATABASE_ROUTERS = ['dc1.db_router.DualDatabaseRouter']
 
 CORS_ALLOW_ALL_ORIGINS = True
 
@@ -307,7 +333,8 @@ CELERY_TIMEZONE = TIME_ZONE
 
 # # For logging errors in consumer
 
-LOGS_DIR = "/app/logs"
+# Use Docker path if running in container, otherwise use local path
+LOGS_DIR = "/app/logs" if os.path.exists("/app") else os.path.join(BASE_DIR, "logs")
 os.makedirs(LOGS_DIR, exist_ok=True)
 LOGGING = {
     "version": 1,
@@ -326,8 +353,7 @@ LOGGING = {
         "file": {
             "level": "DEBUG",
             "class": "logging.FileHandler",
-            # "filename": os.path.join(BASE_DIR, "chat_debug.log"),  # Logs to file
-            "filename": "/app/logs/chat_debug.log",
+            "filename": os.path.join(LOGS_DIR, "chat_debug.log"),
             "formatter": "verbose",
         },
         "console": {
